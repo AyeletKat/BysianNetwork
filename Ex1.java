@@ -7,11 +7,13 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 // import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileWriter;
 // import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -34,20 +36,26 @@ public class Ex1 {
         String xmlName = allLines.get(0);
         Map<String, Variable> network = readXML(xmlName);
 
-        // read input.txt (queries part) and send input to correct functions        
+        // read input.txt (queries part) and send input to correct functions
+        // write output to output.txt 
+        FileWriter writer = new FileWriter("output.txt");       
         for (int i=1; i<allLines.size(); i++) {
             String line = allLines.get(i);
             if (line.startsWith("P(") && !line.contains("|")) { // joint probability query
                 double result = jointProbability(line, network);
-                System.out.printf("Joint Probability for: %s = %.5f, 0 addition operations, %d mul operations.", line, result, curr_num_mul_operations);
+                //System.out.printf("Joint Probability for: %s = %.5f, 0 addition operations, %d mul operations.", line, result, curr_num_mul_operations);
+                // write result to output.txt file
+                writer.write(String.format("%.5f,0,%d\n", result, curr_num_mul_operations));
                 curr_num_mul_operations = 0; // reset for next query
                 curr_num_add_operations = 0;
-                // write result to output.txt file
             }
             // else if (line.startsWith("P(") && line.contains("|") && line.endsWith("1")) {} // algo 1
             else if (line.startsWith("P(") && line.contains("|") && line.endsWith("2")) { // algo 2
-                System.out.println("\nPROCESSING VE QUERY \n:");
+                //System.out.println("\nPROCESSING VE QUERY \n:");
                 double[] result = algo2(line, network);
+                if (result[0] == -1 && result[1] == -1 && result[2] == -1) { return;}
+                writer.write(String.format("%.5f,%d,%d\n", result[0], (int)result[1], (int)result[2]));
+                //System.out.printf("Variable Elimination for: %s = %.5f, %.0f addition operations, %.0f mul operations.", line, result[0], result[1], result[2]);
                 // System.out.printf("Variable Elimination for: %s = %.5f, %d addition operations, %d mul operations.", line, result[0], curr_num_add_operations, curr_num_mul_operations);
                 // curr_num_mul_operations = 0; // reset for next query
                 // curr_num_add_operations = 0;
@@ -62,7 +70,14 @@ public class Ex1 {
             // }
             
             // else throw new Exception("Invalid query format: " + line);
-        }
+            }
+            else if (line.startsWith("P(") && line.contains("|") && line.endsWith("3")) { // algo 3
+                //System.out.println("\nPROCESSING VE QUERY \n:");
+                double[] result = algo3(line, network);
+                if (result[0] == -1 && result[1] == -1 && result[2] == -1) { return;}
+                writer.write(String.format("%.5f,%d,%d\n", result[0], (int)result[1], (int)result[2]));
+                //System.out.printf("Variable Elimination for: %s = %.5f, %.0f addition operations, %.0f mul operations.", line, result[0], result[1], result[2]);
+            }
         /////////////// trying to join factors
         // List<Factor> factors = new ArrayList<>();
         // for (String var : network.keySet()) {
@@ -129,9 +144,12 @@ public class Ex1 {
         //     }
         //     System.out.println();
         // }
-    }
+        }
         //////////////////////////////////
-        // write output to file
+        // close file output.txt
+        writer.close();
+        // close file input.txt
+
         // file.close();
         // FileWriter writer = new FileWriter("output.txt");
     }
@@ -272,6 +290,7 @@ public class Ex1 {
     /**
      * For a given variable and a map of variable values assignments from 
      * joint probability query, finds variable's probability from CPT.
+     * Note: searches only in the CPT of the qyuery variable.
      * 
      * @param var - the variable for which we want to find the probability
      * @param assignments - a map of variable names to their outcomes
@@ -445,16 +464,29 @@ public class Ex1 {
      * @return double[3] array containing probability, number of addition operations, number of multiplication operations.
      */
     public static double[] algo2 (String query, Map<String, Variable> network) {
-        // 1. parsing query
-        List<List<Object>> data = PreprocessQuery(network, query);
-        // parsing from Object to relevant types
+        int num_add_operations = 0;
+        int num_mul_operations = 0;
+        // 1. parsing query & checking if query already has answer in CPT
+        List<List<Object>> data = new ArrayList<>();
+        try {
+            data = PreprocessQuery(network, query);
+        }
+        catch (FoundInCPTException e){
+            // if the query was found already in cpt, we had the exception and can finish checks here!
+            return new double[] {e.getValue(), 0, 0};
+        }
+        if (data == null){
+            System.err.println("Error: PreprocessQuery returned null.");
+            return new double[] {-1, -1, -1};
+        }
+        // if preprocessing was sucsessful - now parsing from Object to relevant types
         List<Object> rawFactors = data.get(0);
         List<Factor> factors = new ArrayList<>();
         for (Object obj : rawFactors) {
             if (obj instanceof Factor) factors.add((Factor) obj);
             else throw new ClassCastException("Element in list is not of type Factor");
         }
-        List<Object> rawHiddenVars = data.get(1); // cast (List<Object>)
+        List<Object> rawHiddenVars = data.get(1);
         List<String> hiddenVars = new ArrayList<>();
         for (Object obj : rawHiddenVars) {
             if (obj instanceof String) hiddenVars.add((String) obj); 
@@ -470,6 +502,7 @@ public class Ex1 {
         String query_var_name = (String) data.get(3).get(0);
         String query_var_outcome = (String) data.get(4).get(0);
 
+
         // 2. sorting hidden variables by ABC order
         hiddenVars.sort(String::compareTo); // alphabetical sort
 
@@ -478,7 +511,7 @@ public class Ex1 {
             String varToEliminate = hiddenVars.get(0); // get the first variable to eliminate
             hiddenVars.remove(0); // remove it from the list of hidden variables
 
-            // Find the factors that contain the variable to eliminate
+            // 3.1 Find the factors that contain the variable to eliminate
             List<Factor> factorsToJoin = new ArrayList<>();
             for (Factor factor : factors) {
                 if (factor.variables.contains(varToEliminate)) {
@@ -486,7 +519,7 @@ public class Ex1 {
                 }
             }
             
-            // Sort them by table size, then by sum of ASCII values of 
+            // 3.2 Sort them by table size, then by sum of ASCII values of 
             // variables' namesn(in place lambda sorting function)
             factorsToJoin.sort((f1, f2) -> {
                 int cmp = Integer.compare(f1.table.length, f2.table.length);
@@ -500,33 +533,195 @@ public class Ex1 {
                 return Integer.compare(sum1, sum2);
             });
 
-            // Join the factors that contain the variable to eliminate
-            Factor joinedFactor = null;
-            for (Factor factor : factorsToJoin) {
-                if (joinedFactor == null) {
-                    joinedFactor = factor;
-                } else {
-                    joinedFactor = joinedFactor.Join(network, factor, varToEliminate);
-                }
+            // 3.3 now join these factors that contain that hidden variable
+            List<Factor> toJoin = new ArrayList<>(factorsToJoin); // defensive copy
+            while (toJoin.size() > 1) {
+                // Sort factors by table size, then by sum of ASCII values
+                toJoin.sort((f1, f2) -> {
+                    int cmp = Integer.compare(f1.table.length, f2.table.length);
+                    if (cmp != 0) return cmp;
+                    int sum1 = f1.variables.stream().flatMapToInt(String::chars).sum();
+                    int sum2 = f2.variables.stream().flatMapToInt(String::chars).sum();
+                    return Integer.compare(sum1, sum2);
+                });
+                // removing the two smallest
+                Factor f1 = toJoin.remove(0);
+                Factor f2 = toJoin.remove(0);
+
+                Factor joined = f1.Join(network, f2, varToEliminate);// Joining them
+                num_mul_operations += joined.table.length; // one probabilities multipication to get each row
+                toJoin.add(joined); // adding the result back to list of factors
+
             }
+            // joined result, last factor
+            Factor joinedFactor = toJoin.get(0);
 
-            // Eliminate the variable from the joined factor
+            // 3.4 now eliminate the hidden variable from the joined factor
             Factor eliminatedFactor = joinedFactor.Eliminate(network, varToEliminate);
+            // num additions; for hidden var with n outcomes, to add them to one row, n-1 additions
+            num_add_operations += (eliminatedFactor.table.length)*(network.get(varToEliminate).numOutcomes-1); 
 
-            // Remove the original factors from the list and add the new factor
+            //3.5 remove the original factors from the list and add the new factor if it's not one valued
             factors.removeAll(factorsToJoin);
-            factors.add(eliminatedFactor);
+            if (eliminatedFactor.table.length > 1) factors.add(eliminatedFactor);
         }
 
 
-        // 4. Join remaining factors
+        // 4. Join remaining factors of query variable
+        while (factors.size() > 1) {
+            // Sort factors. should be from the same size and same (query) variable but still.
+            factors.sort((f1, f2) -> {
+                int cmp = Integer.compare(f1.table.length, f2.table.length);
+                if (cmp != 0) return cmp;
+                int sum1 = f1.variables.stream().flatMapToInt(String::chars).sum();
+                int sum2 = f2.variables.stream().flatMapToInt(String::chars).sum();
+                return Integer.compare(sum1, sum2);
+            });
+            // Remove the two smallest
+            Factor f1 = factors.remove(0);
+            Factor f2 = factors.remove(0);
+            // Join them
+            Factor joinedH = f1.Join(network, f2, null); // no hidden variable to eliminate
+            num_mul_operations += joinedH.table.length; // one probabilities multipication to get each row
+            // Add the result back
+            factors.add(joinedH);
+        }
 
-        // 5. Normalize
+        // 5. Normalize the last factor
+        Factor finalFactor = factors.get(0);
+        double[] norm = finalFactor.Normalize();
+        num_add_operations += (network.get(query_var_name).numOutcomes - 1); // sum n outcomes to normalize = n-1 add operations
 
         // 6. Pull out probability of query given outcome
+        int indx = network.get(query_var_name).outcomes.indexOf(query_var_outcome);
+        double prob = norm[indx];
 
-        return new double[] {0.0, 0.0, 0.0};
+        return new double[] {prob, (double)num_add_operations, (double)num_mul_operations};
     }
+
+
+    /**
+     * Algorithm 3 - Variable Elimination with min-fill heuristic.
+     * @param query - String formatted like P(E1=e1|E2=e2, ..., En=en)
+     * @param network - a map of variable names to their Variable objects
+     * @return - returns double[3] - probability, number of addition operations, number of multiplication operations.
+     */
+    public static double[] algo3(String query, Map<String, Variable> network) {
+        int num_add_operations = 0;
+        int num_mul_operations = 0;
+        // 1. parsing query & checking if query already has answer in CPT
+        List<List<Object>> data = new ArrayList<>();
+        try {
+            data = PreprocessQuery(network, query);
+        }
+        catch (FoundInCPTException e){
+            // if the query was found already in cpt, we had the exception and can finish checks here!
+            return new double[] {e.getValue(), 0, 0};
+        }
+        if (data == null){
+            System.err.println("Error: PreprocessQuery returned null.");
+            return new double[] {-1, -1, -1};
+        }
+        // if preprocessing was sucsessful - now parsing from Object to relevant types
+        List<Object> rawFactors = data.get(0);
+        List<Factor> factors = new ArrayList<>();
+        for (Object obj : rawFactors) {
+            if (obj instanceof Factor) factors.add((Factor) obj);
+            else throw new ClassCastException("Element in list is not of type Factor");
+        }
+        List<Object> rawHiddenVars = data.get(1);
+        List<String> hiddenVariables = new ArrayList<>();
+        for (Object obj : rawHiddenVars) {
+            if (obj instanceof String) hiddenVariables.add((String) obj); 
+            else throw new ClassCastException("Element in list is not of type String");
+        }
+
+        List<Object> rawEvidenceVars = data.get(2);
+        List<String> evidenceVars = new ArrayList<>();
+        for (Object obj : rawEvidenceVars) {
+            if (obj instanceof String) evidenceVars.add((String) obj);
+            else throw new ClassCastException("Element in list is not of type String");
+        }
+        String query_var_name = (String) data.get(3).get(0);
+        String query_var_outcome = (String) data.get(4).get(0);
+
+        List<String> hiddenVars = new ArrayList<>(hiddenVariables); // clone to work on it
+    
+        while (!hiddenVars.isEmpty()) {
+            // Select variable with min-fill heuristic
+            String bestVar = null;
+            int minFill = Integer.MAX_VALUE;
+    
+            for (String var : hiddenVars) {
+                // Find factors containing var
+                List<Factor> related = new ArrayList<>();
+                for (Factor f : factors) {
+                    if (f.variables.contains(var)) {
+                        related.add(f);
+                    }
+                }
+                // Simulate join to count new edges
+                Set<String> union = new HashSet<>();
+                for (Factor f : related) {
+                    union.addAll(f.variables);
+                }
+                union.remove(var); // hidden var will be eliminated
+                int edges = 0;
+                List<String> vars = new ArrayList<>(union);
+                for (int i = 0; i < vars.size(); i++) {
+                    for (int j = i + 1; j < vars.size(); j++) {
+                        edges++;
+                    }
+                }
+                if (edges < minFill) {
+                    minFill = edges;
+                    bestVar = var;
+                }
+            }
+    
+            // Eliminate bestVar
+            List<Factor> toJoin = new ArrayList<>();
+            Iterator<Factor> it = factors.iterator();///////////////////////////////////////////////////////
+            while (it.hasNext()) {
+                Factor f = it.next();
+                if (f.variables.contains(bestVar)) {
+                    toJoin.add(f);
+                    it.remove();
+                }
+            }
+    
+            Factor joined = toJoin.get(0);
+            for (int i = 1; i < toJoin.size(); i++) {
+                joined = joined.Join(network, toJoin.get(i), bestVar);
+                num_mul_operations += joined.table.length; // one probabilities multipication to get each row
+            }
+    
+            Factor reduced = joined.Eliminate(network, bestVar);
+            num_add_operations += (reduced.table.length) * (network.get(bestVar).numOutcomes - 1); // sum n outcomes to normalize = n-1 add operations
+            if (reduced != null) {
+                factors.add(reduced);
+            }
+    
+            hiddenVars.remove(bestVar);
+        }
+    
+        // Multiply remaining factors
+        Factor finalFactor = factors.get(0);
+        for (int i = 1; i < factors.size(); i++) {
+            finalFactor = finalFactor.Join(network, factors.get(i), "");
+            num_mul_operations += finalFactor.table.length; // one probabilities multipication to get each row
+        }
+        double[] norm = finalFactor.Normalize();
+        num_add_operations += (network.get(query_var_name).numOutcomes - 1); // sum n outcomes to normalize = n-1 add operations
+
+        // 6. Pull out probability of query given outcome
+        int indx = network.get(query_var_name).outcomes.indexOf(query_var_outcome);
+        double prob = norm[indx];
+
+        return new double[] {prob, (double)num_add_operations, (double)num_mul_operations};
+    
+    }
+        
 
     /**
      * Preprocesses the query by removing irrelevant variables, creating factors for relevant variables, and instantiating factors by evidence variables.
@@ -569,7 +764,22 @@ public class Ex1 {
                 parentsMap.put(var, currVar.parents);
             }
         }
-        // 3. finding irelevant variables as in slide 91 (hidden vars who arent ansectors of query or evidence vars)
+        // 3. before next steps check if query already appears in query's CPT
+        boolean flag = true;
+        Variable queryVar = network.get(query_var_name);
+        if (queryVar != null && queryVar.cpt != null) {
+            for (String evi : evidenceVars) {
+                if (!queryVar.parents.contains(evi)) {
+                    flag = false;
+                    break;
+                }
+            }
+            if (flag){// query should appear in CPT, now searching for it
+                double pro = findProb(queryVar, evidence);
+                throw new FoundInCPTException(pro);
+            }
+        }
+        // 4. finding irelevant variables as in slide 91 (hidden vars who arent ansectors of query or evidence vars)
         Set<String> relevant = new LinkedHashSet<>();
         Queue<String> toProcess = new LinkedList<>();
 
@@ -589,7 +799,7 @@ public class Ex1 {
             if (!relevant.contains(var)) prunedVars.add(var);
         }
 
-        // 4. creating factors for all rlevant variables
+        // 5. creating factors for all rlevant variables
         List<Factor> factors = new ArrayList<>();
         for (String var : relevant) { // FIXME: פה נוצרו פקטורים לפי סיפיטי של משתנים רלוונטים, !לא נמחקו כל פקטור ש*מכיל* משתנה לא רלוונטי!
             Variable currVar = network.get(var);
@@ -603,17 +813,10 @@ public class Ex1 {
                 factors.add(factor);
             }
         }
-        // 5. remove irrelevant variables from hidden list
+        // 6. remove irrelevant variables from hidden list
         hiddenVars.removeIf(var -> !relevant.contains(var)); // remove irrelevant variables from hidden list
-        // for (String prevHidden : hiddenVars){
-        //     if (!relevant.contains(prevHidden)) {
-        //         hiddenVars.remove(prevHidden);
-        //     }
-        // }
 
-        // hiddenVars.sort(String::compareTo); // sort alphabetically
-
-        // 6. instantiate factors by evidence variables given outcomes
+        // 7. instantiate factors by evidence variables given outcomes
         List<Factor> factorsToRemove = new ArrayList<>();
         for (Factor factor : factors) {
             for (String evidenceVar : evidenceVars) {
@@ -675,7 +878,7 @@ public class Ex1 {
         //         System.out.println();
         //     }
         // }
-        // 7. casting as Object to return to algorithms
+        // 8. casting as Object to return to algorithms
         List<List<Object>> result = new ArrayList<>();
         result.add(new ArrayList<Object>(factors));
         result.add(new ArrayList<Object>(hiddenVars));
@@ -687,16 +890,18 @@ public class Ex1 {
     }
 
 
-    // public static double[] normalize(Factor factor) {
-    //     double sum = 0.0;
-    //     for (String[] row : factor.table) {
-    //         sum += Double.parseDouble(row[factor.table[0].length - 1]);
-    //     }
-    //     double[] normalized = new double[factor.table.length];
-    //     for (int i = 0; i < factor.table.length; i++) {
-    //         normalized[i] = Double.parseDouble(factor.table[i][factor.table[0].length - 1]) / sum;
-    //     }
-    //     return normalized;
-    // }
+    static class FoundInCPTException extends RuntimeException {
+        private final double value;
+    
+        public FoundInCPTException(double value) {
+            this.value = value;
+        }
+    
+        public double getValue() {
+            return value;
+        }
+    }
+
+    
 
 }
