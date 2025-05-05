@@ -65,10 +65,10 @@ public class Factor {
         for (String varname : newVariables) {
             domains.add(network.get(varname).outcomes);
         }/////////////////////////////////////
-        System.out.println("Joining factors:");
-        System.out.println("  this.variables: " + this.variables);
-        System.out.println("  other.variables: " + other.variables);
-        System.out.println("  newVariables: " + newVariables);
+        // System.out.println("Joining factors:");
+        // System.out.println("  this.variables: " + this.variables);
+        // System.out.println("  other.variables: " + other.variables);
+        // System.out.println("  newVariables: " + newVariables);
         /////////////////////////////////////
         // 4. For each assignment, look up the probability in both factors and multiply
         for (int row = 0; row < newNumRows; row++) {
@@ -107,8 +107,8 @@ public class Factor {
         return new Factor(newVariables, newTable);
     }
 
-    // // Helper method: find probability in a String[][] factor table
-    private static double findProbability(String[][] table, List<String> varNames, String[] valuesToMatch) {
+    // Helper method: find probability in a String[][] factor table
+    public static double findProbability(String[][] table, List<String> varNames, String[] valuesToMatch) {
         for (String[] row : table) {
             boolean match = true;
             for (int i = 0; i < varNames.size(); i++) {
@@ -172,6 +172,18 @@ public class Factor {
 
 
         return new Factor(newVariables, newTable);
+    }
+
+    public double[] Normalize() {
+        double sum = 0.0;
+        for (String[] row : this.table) {
+            sum += Double.parseDouble(row[this.table[0].length - 1]);
+        }
+        double[] normalized = new double[this.table.length];
+        for (int i = 0; i < this.table.length; i++) {
+            normalized[i] = Double.parseDouble(this.table[i][this.table[0].length - 1]) / sum;
+        }
+        return normalized;
     }
 
 }
