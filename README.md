@@ -1,4 +1,3 @@
-Got it! Here's a version of the README written just like your original text, with explanations per file and then per function, cleaned up and formatted for a GitHub project:
 
 ---
 
