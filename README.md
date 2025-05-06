@@ -3,7 +3,7 @@
 
 # Bayesian Network
 
-## Ex1 מכיל:
+## קובץ Ex1:
 
 ### `Main`
 
