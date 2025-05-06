@@ -8,15 +8,11 @@ import java.util.Map;
 public class Factor {
     List <String> variables; // List of variable names in the factor
     String[][] table; // 2D array for the factor table
-    //int numRows; // Number of rows in the factor table
-    //int numCols; // Number of columns in the factor table
     int numVariables; // Number of variables in the factor
 
     public Factor() {
         this.variables = new ArrayList<>();
         this.table = null;
-        //this.numRows = 0;
-        //this.numCols = 0;
         this.numVariables = 0;
     }
     public Factor(List<String> variables, String[][] table) {
@@ -25,14 +21,22 @@ public class Factor {
         }
         this.variables = variables;
         this.table = table;
-        //this.numRows = table.length;
-        //this.numCols = table[0].length;
         this.numVariables = variables.size();
         if (table[0].length != numVariables+1) {
             throw new IllegalArgumentException("Num factor columns != num Variables+1!");
         }
     }
     
+    /**
+     * This function joins factor "other" (passed in brackets) with the factor the function is called on.
+     * It returns a new factor that is the result of the join operation.
+     * The join operation is performed by multiplying the probabilities of the two factors 
+     * for matching assignment of their common variables, and iterating through the rest.
+     * @param network
+     * @param other
+     * @param hiddenVar
+     * @return
+     */
     public Factor Join(Map<String, Variable> network, Factor other, String hiddenVar) {
         // checking correctness of the input
         if(this.table.length == 0 || other.table.length == 0) {
@@ -107,8 +111,8 @@ public class Factor {
         return new Factor(newVariables, newTable);
     }
 
-    // Helper method: find probability in a String[][] factor table
-    public static double findProbability(String[][] table, List<String> varNames, String[] valuesToMatch) {
+    // Helper method: finds probability in a String[][] factor table (looks where is the correct assingments combination)
+    private static double findProbability(String[][] table, List<String> varNames, String[] valuesToMatch) {
         for (String[] row : table) {
             boolean match = true;
             for (int i = 0; i < varNames.size(); i++) {
@@ -124,6 +128,12 @@ public class Factor {
         return 0.0;
     }
 
+    /**
+     * * This function eliminates the passed "hiddenVar" variable from the factor the function is called on.
+     * @param network
+     * @param hiddenVar
+     * @return
+     */
     public Factor Eliminate(Map<String, Variable> network, String hiddenVar) {
         if (this.table.length == 0) {
             throw new IllegalArgumentException("Cannot eliminate from an empty factor.");
@@ -148,7 +158,7 @@ public class Factor {
                 newTable[row][col] = domain.get(idx);
             }
         }
-        // Assign the probability to the last column // !!!!!!!!!!!!!!!!!!!!!
+        // Assign the probability to the last column
         List<String> hiddenDomains = network.get(hiddenVar).outcomes;
         for (int i = 0; i < newTable.length; i++) {// for each row in the new table
             double sum = 0.0;
@@ -169,11 +179,13 @@ public class Factor {
             newTable[i][newVariables.size()] = String.valueOf(sum);
         }
 
-
-
         return new Factor(newVariables, newTable);
     }
 
+    /**
+     * This function normalizes the factor table by dividing each probability by the sum of all probabilities.
+     * @return normalized factor table (the last column of the table, the probabilities only)
+     */
     public double[] Normalize() {
         double sum = 0.0;
         for (String[] row : this.table) {
